@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - R3LIFE Link Hub</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <h1>R3LIFE</h1>
+        <p class="tagline">Admin Panel</p>
+      </div>
+      <button id="logout-btn" class="btn btn-outline" style="display:none;">Logout</button>
+    </header>
+
+    <!-- Login Form -->
+    <div id="login-section" class="card login-card">
+      <h2>Admin Login</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <div id="login-error" class="error-msg" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary btn-full">Login</button>
+      </form>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="admin-section" style="display:none;">
+      <!-- Add / Edit Form -->
+      <div class="card">
+        <h2 id="form-title">Add New Menu</h2>
+        <form id="menu-form">
+          <input type="hidden" id="edit-id">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="menu-name">Menu Name</label>
+              <input type="text" id="menu-name" required placeholder="e.g. Facebook">
+            </div>
+            <div class="form-group">
+              <label for="menu-url">URL</label>
+              <input type="url" id="menu-url" required placeholder="https://example.com">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="menu-image">Image</label>
+            <div class="file-input-wrapper">
+              <input type="file" id="menu-image" accept="image/*">
+              <div id="image-preview" class="image-preview"></div>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-btn">Add Menu</button>
+            <button type="button" class="btn btn-outline" id="cancel-btn" style="display:none;">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Menu List -->
+      <div class="card">
+        <h2>Menu List</h2>
+        <p class="hint">Drag and drop to reorder</p>
+        <div id="admin-menu-list" class="admin-menu-list">
+          <!-- Items loaded dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>
