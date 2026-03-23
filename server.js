@@ -251,6 +251,8 @@ app.get('/api/auth', (req, res) => {
 
 // Helper: get allowed category IDs for current user
 async function getAllowedCategories(req) {
+  // Admin sees everything
+  if (req.session?.isAdmin) return null;
   if (!req.session?.msUser) return null; // no MS user = no filtering
   const email = req.session.msUser.email;
   const perms = await db.execute({ sql: 'SELECT category_id FROM user_permissions WHERE user_email = ?', args: [email] });
