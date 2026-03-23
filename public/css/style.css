@@ -79,9 +79,9 @@ body {
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 24px 32px;
+  padding: 24px 40px;
   flex: 1;
 }
 
@@ -148,17 +148,24 @@ body {
   font-weight: 500;
 }
 
+/* === Category Grid (Public Page - Dashboard Layout) === */
+#main-content {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
 /* === Menu Grid (Public) === */
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 24px;
-  padding: 20px 0;
-  justify-items: center;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 16px;
+  padding: 12px 0;
 }
 
 .menu-item {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.4);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(33, 150, 243, 0.15);
@@ -172,7 +179,6 @@ body {
   align-items: center;
   cursor: pointer;
   width: 100%;
-  max-width: 200px;
 }
 
 .menu-item:hover {
@@ -219,6 +225,7 @@ body {
   text-align: center;
   padding: 64px 16px;
   color: var(--text-muted);
+  grid-column: 1 / -1;
 }
 
 .empty-state svg {
@@ -480,14 +487,19 @@ body {
 
 /* === Category Title (Public Page) === */
 .category-section {
-  margin-bottom: 32px;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 16px;
+  padding: 20px;
 }
 
 .category-title {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--primary-dark);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   padding-bottom: 8px;
   border-bottom: 2px solid rgba(33, 150, 243, 0.2);
   letter-spacing: 1px;
@@ -836,18 +848,24 @@ body {
 }
 
 /* === Responsive === */
+@media (max-width: 900px) {
+  #main-content {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 600px) {
   .container {
     padding: 16px 12px;
   }
 
   .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
   }
 
-  .menu-item {
-    max-width: none;
+  .category-section {
+    padding: 14px;
   }
 
   .header .logo h1 {
