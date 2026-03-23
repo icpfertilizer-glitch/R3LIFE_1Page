@@ -254,19 +254,19 @@ async function getAllowedCategories(req) {
   if (!req.session?.msUser) return null; // no MS user = no filtering
   const email = req.session.msUser.email;
   const perms = await db.execute({ sql: 'SELECT category_id FROM user_permissions WHERE user_email = ?', args: [email] });
-  if (perms.rows.length === 0) return null; // no permissions set = see all
+  if (perms.rows.length === 0) return []; // no permissions set = see nothing
   return perms.rows.map(r => r.category_id);
 }
 
 app.get('/api/categories', requireMsLogin, async (req, res) => {
   const allowed = await getAllowedCategories(req);
-  let result;
-  if (allowed) {
+  if (allowed !== null) {
+    if (allowed.length === 0) return res.json([]);
     const placeholders = allowed.map(() => '?').join(',');
-    result = await db.execute({ sql: `SELECT * FROM categories WHERE id IN (${placeholders}) ORDER BY sort_order ASC, id ASC`, args: allowed });
-  } else {
-    result = await db.execute('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
+    const result = await db.execute({ sql: `SELECT * FROM categories WHERE id IN (${placeholders}) ORDER BY sort_order ASC, id ASC`, args: allowed });
+    return res.json(result.rows);
   }
+  const result = await db.execute('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
   res.json(result.rows);
 });
 
@@ -320,10 +320,10 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
 
 app.get('/api/menus', requireMsLogin, async (req, res) => {
   const allowed = await getAllowedCategories(req);
-  let result;
-  if (allowed) {
+  if (allowed !== null) {
+    if (allowed.length === 0) return res.json([]);
     const placeholders = allowed.map(() => '?').join(',');
-    result = await db.execute({
+    const result = await db.execute({
       sql: `SELECT menus.*, categories.name as category_name
             FROM menus
             LEFT JOIN categories ON menus.category_id = categories.id
@@ -331,14 +331,14 @@ app.get('/api/menus', requireMsLogin, async (req, res) => {
             ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC`,
       args: allowed
     });
-  } else {
-    result = await db.execute(`
-      SELECT menus.*, categories.name as category_name
-      FROM menus
-      LEFT JOIN categories ON menus.category_id = categories.id
-      ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC
-    `);
+    return res.json(result.rows);
   }
+  const result = await db.execute(`
+    SELECT menus.*, categories.name as category_name
+    FROM menus
+    LEFT JOIN categories ON menus.category_id = categories.id
+    ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC
+  `);
   res.json(result.rows);
 });
 

@@ -408,7 +408,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }).join('')}
         </div>
         <div class="user-perm-status">
-          ${user.permissions.length === 0 ? 'เห็นทุก category' : `เห็น ${user.permissions.length} category`}
+          ${user.permissions.length === 0 ? 'ยังไม่มีสิทธิ์ (ไม่เห็นอะไร)' : `เห็น ${user.permissions.length} category`}
         </div>
       </div>
     `).join('');
@@ -426,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const statusEl = card.querySelector('.user-perm-status');
-    statusEl.textContent = categoryIds.length === 0 ? 'เห็นทุก category' : `เห็น ${categoryIds.length} category`;
+    statusEl.textContent = categoryIds.length === 0 ? 'ยังไม่มีสิทธิ์ (ไม่เห็นอะไร)' : `เห็น ${categoryIds.length} category`;
 
     await fetch(`/api/users/${encodeURIComponent(email)}/permissions`, {
       method: 'PUT',
