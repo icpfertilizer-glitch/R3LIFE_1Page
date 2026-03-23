@@ -543,26 +543,31 @@ app.put('/api/users/:email/approve', requireAdmin, async (req, res) => {
 
 // Set permissions for a user (replace all)
 app.put('/api/users/:email/permissions', requireAdmin, async (req, res) => {
-  const email = decodeURIComponent(req.params.email);
-  const { category_ids, menu_ids } = req.body;
+  try {
+    const email = decodeURIComponent(req.params.email);
+    const { category_ids, menu_ids } = req.body;
 
-  if (!Array.isArray(category_ids) || !Array.isArray(menu_ids)) {
-    return res.status(400).json({ error: 'category_ids and menu_ids must be arrays' });
+    if (!Array.isArray(category_ids) || !Array.isArray(menu_ids)) {
+      return res.status(400).json({ error: 'category_ids and menu_ids must be arrays' });
+    }
+
+    // Replace category permissions
+    await db.execute({ sql: 'DELETE FROM user_permissions WHERE user_email = ?', args: [email] });
+    for (const catId of category_ids) {
+      await db.execute({ sql: 'INSERT OR IGNORE INTO user_permissions (user_email, category_id) VALUES (?, ?)', args: [email, catId] });
+    }
+
+    // Replace menu permissions
+    await db.execute({ sql: 'DELETE FROM user_menu_permissions WHERE user_email = ?', args: [email] });
+    for (const menuId of menu_ids) {
+      await db.execute({ sql: 'INSERT OR IGNORE INTO user_menu_permissions (user_email, menu_id) VALUES (?, ?)', args: [email, menuId] });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Permission update error:', err);
+    res.status(500).json({ error: 'Failed to update permissions' });
   }
-
-  // Replace category permissions
-  await db.execute({ sql: 'DELETE FROM user_permissions WHERE user_email = ?', args: [email] });
-  for (const catId of category_ids) {
-    await db.execute({ sql: 'INSERT INTO user_permissions (user_email, category_id) VALUES (?, ?)', args: [email, catId] });
-  }
-
-  // Replace menu permissions
-  await db.execute({ sql: 'DELETE FROM user_menu_permissions WHERE user_email = ?', args: [email] });
-  for (const menuId of menu_ids) {
-    await db.execute({ sql: 'INSERT INTO user_menu_permissions (user_email, menu_id) VALUES (?, ?)', args: [email, menuId] });
-  }
-
-  res.json({ success: true });
 });
 
 // Delete a user and their permissions
