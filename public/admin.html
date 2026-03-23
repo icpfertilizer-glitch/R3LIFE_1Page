@@ -37,7 +37,19 @@
 
     <!-- Admin Panel -->
     <div id="admin-section" style="display:none;">
-      <!-- Add / Edit Form -->
+      <!-- Category Management -->
+      <div class="card">
+        <h2>Categories</h2>
+        <div class="category-add-row">
+          <input type="text" id="category-name" placeholder="ชื่อหมวดหมู่ใหม่" class="category-input">
+          <button class="btn btn-primary btn-sm" id="add-category-btn">Add</button>
+        </div>
+        <div id="category-list" class="category-list">
+          <!-- Categories loaded dynamically -->
+        </div>
+      </div>
+
+      <!-- Add / Edit Menu Form -->
       <div class="card">
         <h2 id="form-title">Add New Menu</h2>
         <form id="menu-form">
@@ -52,11 +64,19 @@
               <input type="url" id="menu-url" required placeholder="https://example.com">
             </div>
           </div>
-          <div class="form-group">
-            <label for="menu-image">Image</label>
-            <div class="file-input-wrapper">
-              <input type="file" id="menu-image" accept="image/*">
-              <div id="image-preview" class="image-preview"></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="menu-category">Category</label>
+              <select id="menu-category" class="form-select">
+                <option value="">-- ไม่มีหมวดหมู่ --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="menu-image">Image</label>
+              <div class="file-input-wrapper">
+                <input type="file" id="menu-image" accept="image/*">
+                <div id="image-preview" class="image-preview"></div>
+              </div>
             </div>
           </div>
           <div class="form-actions">
