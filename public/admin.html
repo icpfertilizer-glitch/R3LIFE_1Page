@@ -40,6 +40,14 @@
 
     <!-- Admin Panel -->
     <div id="admin-section" style="display:none;">
+      <!-- Tab Navigation -->
+      <div class="admin-tabs">
+        <button class="tab-btn active" data-tab="tab-menus">Menus</button>
+        <button class="tab-btn" data-tab="tab-users">Manage Users</button>
+      </div>
+
+      <!-- Tab: Menus -->
+      <div id="tab-menus" class="tab-content active">
       <!-- Category Management -->
       <div class="card">
         <h2>Categories</h2>
@@ -96,6 +104,18 @@
         <p class="hint">Drag and drop to reorder</p>
         <div id="admin-menu-list" class="admin-menu-list">
           <!-- Items loaded dynamically -->
+        </div>
+      </div>
+      </div>
+
+      <!-- Tab: Users -->
+      <div id="tab-users" class="tab-content">
+        <div class="card">
+          <h2>User Permissions</h2>
+          <p class="hint">ถ้าไม่เลือก category = เห็นทั้งหมด, เลือก = เห็นเฉพาะที่เลือก</p>
+          <div id="user-list" class="user-list">
+            <!-- Users loaded dynamically -->
+          </div>
         </div>
       </div>
     </div>

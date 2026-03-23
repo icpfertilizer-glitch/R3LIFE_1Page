@@ -37,6 +37,25 @@ async function initDB() {
       FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     )
   `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT UNIQUE NOT NULL,
+      name TEXT,
+      tenant_id TEXT,
+      last_login DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_permissions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_email TEXT NOT NULL,
+      category_id INTEGER NOT NULL,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+      UNIQUE(user_email, category_id)
+    )
+  `);
 }
 
 // --- Microsoft Entra ID (Azure AD) Setup ---
@@ -156,6 +175,13 @@ app.get('/auth/callback', async (req, res) => {
       tenantId: account.tenantId
     };
 
+    // Save/update user in database
+    await db.execute({
+      sql: `INSERT INTO users (email, name, tenant_id, last_login) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(email) DO UPDATE SET name = ?, tenant_id = ?, last_login = CURRENT_TIMESTAMP`,
+      args: [account.username, account.name, account.tenantId, account.name, account.tenantId]
+    });
+
     const returnTo = req.session.returnTo || '/';
     delete req.session.returnTo;
     res.redirect(returnTo);
@@ -223,8 +249,24 @@ app.get('/api/auth', (req, res) => {
 
 // --- Category API (read: MS auth, write: admin) ---
 
+// Helper: get allowed category IDs for current user
+async function getAllowedCategories(req) {
+  if (!req.session?.msUser) return null; // no MS user = no filtering
+  const email = req.session.msUser.email;
+  const perms = await db.execute({ sql: 'SELECT category_id FROM user_permissions WHERE user_email = ?', args: [email] });
+  if (perms.rows.length === 0) return null; // no permissions set = see all
+  return perms.rows.map(r => r.category_id);
+}
+
 app.get('/api/categories', requireMsLogin, async (req, res) => {
-  const result = await db.execute('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
+  const allowed = await getAllowedCategories(req);
+  let result;
+  if (allowed) {
+    const placeholders = allowed.map(() => '?').join(',');
+    result = await db.execute({ sql: `SELECT * FROM categories WHERE id IN (${placeholders}) ORDER BY sort_order ASC, id ASC`, args: allowed });
+  } else {
+    result = await db.execute('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
+  }
   res.json(result.rows);
 });
 
@@ -277,12 +319,26 @@ app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
 // --- Menu API (read: MS auth, write: admin) ---
 
 app.get('/api/menus', requireMsLogin, async (req, res) => {
-  const result = await db.execute(`
-    SELECT menus.*, categories.name as category_name
-    FROM menus
-    LEFT JOIN categories ON menus.category_id = categories.id
-    ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC
-  `);
+  const allowed = await getAllowedCategories(req);
+  let result;
+  if (allowed) {
+    const placeholders = allowed.map(() => '?').join(',');
+    result = await db.execute({
+      sql: `SELECT menus.*, categories.name as category_name
+            FROM menus
+            LEFT JOIN categories ON menus.category_id = categories.id
+            WHERE menus.category_id IN (${placeholders})
+            ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC`,
+      args: allowed
+    });
+  } else {
+    result = await db.execute(`
+      SELECT menus.*, categories.name as category_name
+      FROM menus
+      LEFT JOIN categories ON menus.category_id = categories.id
+      ORDER BY categories.sort_order ASC, menus.sort_order ASC, menus.id ASC
+    `);
+  }
   res.json(result.rows);
 });
 
@@ -341,6 +397,49 @@ app.delete('/api/menus/:id', requireAdmin, async (req, res) => {
   if (existing.rows.length === 0) return res.status(404).json({ error: 'Menu not found' });
 
   await db.execute({ sql: 'DELETE FROM menus WHERE id = ?', args: [id] });
+  res.json({ success: true });
+});
+
+// --- User Permission API (admin only) ---
+
+// Get all users with their permissions
+app.get('/api/users', requireAdmin, async (req, res) => {
+  const users = await db.execute('SELECT * FROM users ORDER BY name ASC');
+  const permissions = await db.execute('SELECT * FROM user_permissions');
+
+  const userList = users.rows.map(u => ({
+    ...u,
+    permissions: permissions.rows.filter(p => p.user_email === u.email).map(p => p.category_id)
+  }));
+  res.json(userList);
+});
+
+// Set permissions for a user (replace all)
+app.put('/api/users/:email/permissions', requireAdmin, async (req, res) => {
+  const email = decodeURIComponent(req.params.email);
+  const { category_ids } = req.body; // array of category IDs (empty = see all)
+
+  if (!Array.isArray(category_ids)) return res.status(400).json({ error: 'category_ids must be an array' });
+
+  // Delete existing permissions
+  await db.execute({ sql: 'DELETE FROM user_permissions WHERE user_email = ?', args: [email] });
+
+  // Insert new permissions
+  for (const catId of category_ids) {
+    await db.execute({
+      sql: 'INSERT INTO user_permissions (user_email, category_id) VALUES (?, ?)',
+      args: [email, catId]
+    });
+  }
+
+  res.json({ success: true });
+});
+
+// Delete a user and their permissions
+app.delete('/api/users/:email', requireAdmin, async (req, res) => {
+  const email = decodeURIComponent(req.params.email);
+  await db.execute({ sql: 'DELETE FROM user_permissions WHERE user_email = ?', args: [email] });
+  await db.execute({ sql: 'DELETE FROM users WHERE email = ?', args: [email] });
   res.json({ success: true });
 });
 

@@ -357,6 +357,90 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // === Tab Switching ===
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+
+      if (btn.dataset.tab === 'tab-users') loadUsers();
+    });
+  });
+
+  // === User Permission Management ===
+  const userListEl = document.getElementById('user-list');
+  let allCategories = [];
+
+  async function loadUsers() {
+    const [usersRes, catsRes] = await Promise.all([
+      fetch('/api/users'),
+      fetch('/api/categories')
+    ]);
+    const users = await usersRes.json();
+    allCategories = await catsRes.json();
+
+    if (users.length === 0) {
+      userListEl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px;">ยังไม่มีผู้ใช้ที่เคย login</p>';
+      return;
+    }
+
+    userListEl.innerHTML = users.map(user => `
+      <div class="user-card" data-email="${escapeHtml(user.email)}">
+        <div class="user-card-header">
+          <div class="user-card-info">
+            <div class="user-card-name">${escapeHtml(user.name || 'Unknown')}</div>
+            <div class="user-card-email">${escapeHtml(user.email)}</div>
+            <div class="user-card-login">Last login: ${user.last_login || '-'}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser('${escapeHtml(user.email).replace(/'/g, "\\'")}')">Delete</button>
+        </div>
+        <div class="user-perm-label">Visible Categories</div>
+        <div class="user-perm-checkboxes">
+          ${allCategories.map(cat => {
+            const checked = user.permissions.includes(cat.id);
+            return `<label class="perm-checkbox ${checked ? 'checked' : ''}">
+              <input type="checkbox" value="${cat.id}" ${checked ? 'checked' : ''}
+                onchange="updatePermission('${escapeHtml(user.email).replace(/'/g, "\\'")}', this)">
+              ${escapeHtml(cat.name)}
+            </label>`;
+          }).join('')}
+        </div>
+        <div class="user-perm-status">
+          ${user.permissions.length === 0 ? 'เห็นทุก category' : `เห็น ${user.permissions.length} category`}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.updatePermission = async (email, checkbox) => {
+    const card = checkbox.closest('.user-card');
+    const checkboxes = card.querySelectorAll('.perm-checkbox input[type="checkbox"]');
+    const categoryIds = [...checkboxes].filter(cb => cb.checked).map(cb => parseInt(cb.value));
+
+    // Update visual state
+    card.querySelectorAll('.perm-checkbox').forEach(label => {
+      const cb = label.querySelector('input');
+      label.classList.toggle('checked', cb.checked);
+    });
+
+    const statusEl = card.querySelector('.user-perm-status');
+    statusEl.textContent = categoryIds.length === 0 ? 'เห็นทุก category' : `เห็น ${categoryIds.length} category`;
+
+    await fetch(`/api/users/${encodeURIComponent(email)}/permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category_ids: categoryIds })
+    });
+  };
+
+  window.deleteUser = async (email) => {
+    if (!confirm(`ลบผู้ใช้ ${email} และสิทธิ์ทั้งหมด?`)) return;
+    const res = await fetch(`/api/users/${encodeURIComponent(email)}`, { method: 'DELETE' });
+    if (res.ok) loadUsers();
+  };
+
   function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
