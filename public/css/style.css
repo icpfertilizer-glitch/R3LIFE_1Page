@@ -555,6 +555,12 @@ body {
   width: 100%;
 }
 
+.footer-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: default;
+}
+
 /* === Responsive === */
 @media (max-width: 600px) {
   .menu-grid {
