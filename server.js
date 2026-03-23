@@ -535,6 +535,32 @@ app.post('/api/users', requireAdmin, async (req, res) => {
   res.status(201).json(user.rows[0]);
 });
 
+// Update user info (name, email)
+app.put('/api/users/:email', requireAdmin, async (req, res) => {
+  const oldEmail = decodeURIComponent(req.params.email);
+  const { name, email: newEmail } = req.body;
+
+  const existing = await db.execute({ sql: 'SELECT * FROM users WHERE email = ?', args: [oldEmail] });
+  if (existing.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+  const finalEmail = (newEmail || oldEmail).toLowerCase();
+  const finalName = name !== undefined ? name : existing.rows[0].name;
+
+  // If email changed, check new email doesn't already exist
+  if (finalEmail !== oldEmail) {
+    const dup = await db.execute({ sql: 'SELECT * FROM users WHERE email = ?', args: [finalEmail] });
+    if (dup.rows.length > 0) return res.status(409).json({ error: 'Email already exists' });
+
+    // Update email in permission tables too
+    await db.execute({ sql: 'UPDATE user_permissions SET user_email = ? WHERE user_email = ?', args: [finalEmail, oldEmail] });
+    await db.execute({ sql: 'UPDATE user_menu_permissions SET user_email = ? WHERE user_email = ?', args: [finalEmail, oldEmail] });
+  }
+
+  await db.execute({ sql: 'UPDATE users SET name = ?, email = ? WHERE email = ?', args: [finalName, finalEmail, oldEmail] });
+  const user = await db.execute({ sql: 'SELECT * FROM users WHERE email = ?', args: [finalEmail] });
+  res.json(user.rows[0]);
+});
+
 // Toggle admin role
 app.put('/api/users/:email/admin', requireAdmin, async (req, res) => {
   const email = decodeURIComponent(req.params.email);

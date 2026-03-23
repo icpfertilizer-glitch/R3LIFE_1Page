@@ -474,7 +474,10 @@ document.addEventListener('DOMContentLoaded', () => {
               <div class="user-card-email">${escapeHtml(user.email)}</div>
               <div class="user-card-login">Last login: ${user.last_login || 'ยังไม่เคย login'}</div>
             </div>
-            <button class="btn btn-danger btn-sm" onclick="deleteUser('${emailEsc(user.email)}')">Delete</button>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-outline btn-sm" onclick="editUser('${emailEsc(user.email)}', '${escapeHtml(user.name || '').replace(/'/g, "\\'")}', '${emailEsc(user.email)}')">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteUser('${emailEsc(user.email)}')">Delete</button>
+            </div>
           </div>
 
           <div class="user-role-toggles">
@@ -529,6 +532,25 @@ document.addEventListener('DOMContentLoaded', () => {
       body: JSON.stringify({ is_admin: value })
     });
     loadUsers();
+  };
+
+  window.editUser = async (email, currentName, currentEmail) => {
+    const newName = prompt('ชื่อ:', currentName);
+    if (newName === null) return; // cancelled
+    const newEmail = prompt('Email:', currentEmail);
+    if (newEmail === null) return; // cancelled
+
+    const res = await fetch(`/api/users/${encodeURIComponent(email)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName, email: newEmail })
+    });
+    if (res.ok) {
+      loadUsers();
+    } else {
+      const err = await res.json();
+      alert(err.error || 'Error updating user');
+    }
   };
 
   window.updatePermission = async (email) => {
