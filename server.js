@@ -40,19 +40,21 @@ async function initDB() {
 }
 
 // --- Microsoft Entra ID (Azure AD) Setup ---
-const AZURE_TENANT_ID = process.env.AZURE_TENANT_ID || '';
+// AZURE_ALLOWED_TENANTS: comma-separated tenant IDs (e.g. "tenant-id-1,tenant-id-2")
+const AZURE_ALLOWED_TENANTS = (process.env.AZURE_ALLOWED_TENANTS || '').split(',').map(t => t.trim()).filter(Boolean);
 const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
 const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
 const AZURE_REDIRECT_URI = process.env.AZURE_REDIRECT_URI || 'http://localhost:3000/auth/callback';
 
-const msalEnabled = !!(AZURE_TENANT_ID && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET);
+const msalEnabled = !!(AZURE_ALLOWED_TENANTS.length && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET);
 
 let msalClient = null;
 if (msalEnabled) {
   msalClient = new msal.ConfidentialClientApplication({
     auth: {
       clientId: AZURE_CLIENT_ID,
-      authority: `https://login.microsoftonline.com/${AZURE_TENANT_ID}`,
+      // Use "organizations" to allow any org account, then verify tenant in callback
+      authority: 'https://login.microsoftonline.com/organizations',
       clientSecret: AZURE_CLIENT_SECRET,
     }
   });
@@ -142,9 +144,9 @@ app.get('/auth/callback', async (req, res) => {
       redirectUri: AZURE_REDIRECT_URI
     });
 
-    // Verify tenant
+    // Verify tenant is in allowed list
     const account = tokenResponse.account;
-    if (account.tenantId !== AZURE_TENANT_ID) {
+    if (!AZURE_ALLOWED_TENANTS.includes(account.tenantId)) {
       return res.status(403).send('Access denied: your organization is not allowed.');
     }
 
@@ -167,7 +169,7 @@ app.get('/auth/logout', (req, res) => {
   const wasMs = req.session && req.session.msUser;
   req.session.destroy(() => {
     if (wasMs && msalEnabled) {
-      res.redirect(`https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(AZURE_REDIRECT_URI.replace('/auth/callback', '/'))}`);
+      res.redirect(`https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(AZURE_REDIRECT_URI.replace('/auth/callback', '/'))}`);
     } else {
       res.redirect('/');
     }
