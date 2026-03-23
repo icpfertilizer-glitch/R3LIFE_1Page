@@ -159,8 +159,8 @@ body {
 /* === Menu Grid (Public) === */
 .menu-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
   padding: 12px 0;
 }
 
