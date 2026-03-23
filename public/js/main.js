@@ -2,6 +2,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const mainContent = document.getElementById('main-content');
   const emptyState = document.getElementById('empty-state');
 
+  // Show Microsoft user info if logged in
+  async function checkMsAuth() {
+    try {
+      const res = await fetch('/api/ms-auth');
+      const data = await res.json();
+      if (data.isAuthenticated && data.user) {
+        const userInfo = document.getElementById('user-info');
+        const userName = document.getElementById('user-name');
+        if (userInfo && userName) {
+          userName.textContent = data.user.name || data.user.email;
+          userInfo.style.display = 'flex';
+        }
+      }
+    } catch (e) { /* not authenticated */ }
+  }
+  checkMsAuth();
+
   async function loadMenus() {
     try {
       const [menusRes, catsRes] = await Promise.all([

@@ -129,6 +129,20 @@ body {
   gap: 8px;
 }
 
+.user-info {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 /* === Menu Grid (Public) === */
 .menu-grid {
   display: grid;

@@ -1,6 +1,7 @@
 const express = require('express');
 const session = require('express-session');
 const multer = require('multer');
+const msal = require('@azure/msal-node');
 const { createClient } = require('@libsql/client');
 const path = require('path');
 
@@ -38,6 +39,25 @@ async function initDB() {
   `);
 }
 
+// --- Microsoft Entra ID (Azure AD) Setup ---
+const AZURE_TENANT_ID = process.env.AZURE_TENANT_ID || '';
+const AZURE_CLIENT_ID = process.env.AZURE_CLIENT_ID || '';
+const AZURE_CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET || '';
+const AZURE_REDIRECT_URI = process.env.AZURE_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+
+const msalEnabled = !!(AZURE_TENANT_ID && AZURE_CLIENT_ID && AZURE_CLIENT_SECRET);
+
+let msalClient = null;
+if (msalEnabled) {
+  msalClient = new msal.ConfidentialClientApplication({
+    auth: {
+      clientId: AZURE_CLIENT_ID,
+      authority: `https://login.microsoftonline.com/${AZURE_TENANT_ID}`,
+      clientSecret: AZURE_CLIENT_SECRET,
+    }
+  });
+}
+
 // Multer: memory storage (no disk writes, convert to base64)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -53,7 +73,6 @@ const upload = multer({
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Trust proxy for Render (needed for secure cookies behind HTTPS proxy)
 app.set('trust proxy', 1);
@@ -73,8 +92,19 @@ app.use(session({
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 
-// Auth middleware
-function requireAuth(req, res, next) {
+// --- Auth Middleware ---
+
+// Microsoft login required (for viewing public page)
+function requireMsLogin(req, res, next) {
+  if (!msalEnabled) return next(); // skip if Azure not configured
+  if (req.session && req.session.msUser) return next();
+  // Save the original URL to redirect back after login
+  req.session.returnTo = req.originalUrl;
+  res.redirect('/auth/login');
+}
+
+// Admin login required (for managing menus)
+function requireAdmin(req, res, next) {
   if (req.session && req.session.isAdmin) return next();
   res.status(401).json({ error: 'Unauthorized' });
 }
@@ -86,9 +116,90 @@ function fileToBase64(file) {
   return `data:${file.mimetype};base64,${base64}`;
 }
 
-// --- API Routes ---
+// --- Microsoft Auth Routes ---
 
-// Login
+app.get('/auth/login', async (req, res) => {
+  if (!msalEnabled) return res.redirect('/');
+  try {
+    const authUrl = await msalClient.getAuthCodeUrl({
+      scopes: ['user.read'],
+      redirectUri: AZURE_REDIRECT_URI,
+      prompt: 'select_account'
+    });
+    res.redirect(authUrl);
+  } catch (err) {
+    console.error('MSAL login error:', err);
+    res.status(500).send('Authentication error');
+  }
+});
+
+app.get('/auth/callback', async (req, res) => {
+  if (!msalEnabled) return res.redirect('/');
+  try {
+    const tokenResponse = await msalClient.acquireTokenByCode({
+      code: req.query.code,
+      scopes: ['user.read'],
+      redirectUri: AZURE_REDIRECT_URI
+    });
+
+    // Verify tenant
+    const account = tokenResponse.account;
+    if (account.tenantId !== AZURE_TENANT_ID) {
+      return res.status(403).send('Access denied: your organization is not allowed.');
+    }
+
+    req.session.msUser = {
+      name: account.name,
+      email: account.username,
+      tenantId: account.tenantId
+    };
+
+    const returnTo = req.session.returnTo || '/';
+    delete req.session.returnTo;
+    res.redirect(returnTo);
+  } catch (err) {
+    console.error('MSAL callback error:', err);
+    res.status(500).send('Authentication error');
+  }
+});
+
+app.get('/auth/logout', (req, res) => {
+  const wasMs = req.session && req.session.msUser;
+  req.session.destroy(() => {
+    if (wasMs && msalEnabled) {
+      res.redirect(`https://login.microsoftonline.com/${AZURE_TENANT_ID}/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(AZURE_REDIRECT_URI.replace('/auth/callback', '/'))}`);
+    } else {
+      res.redirect('/');
+    }
+  });
+});
+
+// Check Microsoft auth status
+app.get('/api/ms-auth', (req, res) => {
+  res.json({
+    isAuthenticated: !!(req.session && req.session.msUser),
+    user: req.session?.msUser || null,
+    msalEnabled
+  });
+});
+
+// --- Serve Pages (protected by Microsoft login) ---
+
+// Public page - requires Microsoft login
+app.get('/', requireMsLogin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Admin page - requires Microsoft login first
+app.get('/admin', requireMsLogin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// Static files that need protection (JS, CSS) - allow without login so login page looks right
+app.use(express.static(path.join(__dirname, 'public')));
+
+// --- Admin API ---
+
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   if (username === ADMIN_USER && password === ADMIN_PASS) {
@@ -99,25 +210,23 @@ app.post('/api/login', (req, res) => {
   }
 });
 
-// Logout
 app.post('/api/logout', (req, res) => {
-  req.session.destroy();
+  req.session.isAdmin = false;
   res.json({ success: true });
 });
 
-// Check auth
 app.get('/api/auth', (req, res) => {
   res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
 });
 
-// --- Category API ---
+// --- Category API (read: MS auth, write: admin) ---
 
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', requireMsLogin, async (req, res) => {
   const result = await db.execute('SELECT * FROM categories ORDER BY sort_order ASC, id ASC');
   res.json(result.rows);
 });
 
-app.post('/api/categories', requireAuth, async (req, res) => {
+app.post('/api/categories', requireAdmin, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
@@ -132,7 +241,7 @@ app.post('/api/categories', requireAuth, async (req, res) => {
   res.status(201).json(category.rows[0]);
 });
 
-app.put('/api/categories/reorder', requireAuth, async (req, res) => {
+app.put('/api/categories/reorder', requireAdmin, async (req, res) => {
   const { order } = req.body;
   if (!Array.isArray(order)) return res.status(400).json({ error: 'Order must be an array' });
 
@@ -142,7 +251,7 @@ app.put('/api/categories/reorder', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-app.put('/api/categories/:id', requireAuth, async (req, res) => {
+app.put('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { name } = req.body;
   const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [id] });
@@ -153,7 +262,7 @@ app.put('/api/categories/:id', requireAuth, async (req, res) => {
   res.json(category.rows[0]);
 });
 
-app.delete('/api/categories/:id', requireAuth, async (req, res) => {
+app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const existing = await db.execute({ sql: 'SELECT * FROM categories WHERE id = ?', args: [id] });
   if (existing.rows.length === 0) return res.status(404).json({ error: 'Category not found' });
@@ -163,9 +272,9 @@ app.delete('/api/categories/:id', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// --- Menu API ---
+// --- Menu API (read: MS auth, write: admin) ---
 
-app.get('/api/menus', async (req, res) => {
+app.get('/api/menus', requireMsLogin, async (req, res) => {
   const result = await db.execute(`
     SELECT menus.*, categories.name as category_name
     FROM menus
@@ -175,7 +284,7 @@ app.get('/api/menus', async (req, res) => {
   res.json(result.rows);
 });
 
-app.post('/api/menus', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/menus', requireAdmin, upload.single('image'), async (req, res) => {
   const { name, url, category_id } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'Name and URL are required' });
 
@@ -193,7 +302,7 @@ app.post('/api/menus', requireAuth, upload.single('image'), async (req, res) => 
   res.status(201).json(menu.rows[0]);
 });
 
-app.put('/api/menus/reorder', requireAuth, async (req, res) => {
+app.put('/api/menus/reorder', requireAdmin, async (req, res) => {
   const { order } = req.body;
   if (!Array.isArray(order)) return res.status(400).json({ error: 'Order must be an array' });
 
@@ -203,7 +312,7 @@ app.put('/api/menus/reorder', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-app.put('/api/menus/:id', requireAuth, upload.single('image'), async (req, res) => {
+app.put('/api/menus/:id', requireAdmin, upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { name, url, category_id } = req.body;
   const existing = await db.execute({ sql: 'SELECT * FROM menus WHERE id = ?', args: [id] });
@@ -224,7 +333,7 @@ app.put('/api/menus/:id', requireAuth, upload.single('image'), async (req, res) 
   res.json(menu.rows[0]);
 });
 
-app.delete('/api/menus/:id', requireAuth, async (req, res) => {
+app.delete('/api/menus/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const existing = await db.execute({ sql: 'SELECT * FROM menus WHERE id = ?', args: [id] });
   if (existing.rows.length === 0) return res.status(404).json({ error: 'Menu not found' });
@@ -233,15 +342,11 @@ app.delete('/api/menus/:id', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// Serve admin page
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
 // Start server after DB init
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Microsoft Auth: ${msalEnabled ? 'ENABLED' : 'DISABLED (set AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)'}`);
   });
 }).catch(err => {
   console.error('Failed to initialize database:', err);
