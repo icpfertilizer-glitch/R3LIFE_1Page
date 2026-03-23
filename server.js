@@ -236,6 +236,11 @@ app.get('/auth/logout', (req, res) => {
   });
 });
 
+// Health check endpoint (for uptime monitoring)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Check Microsoft auth status
 app.get('/api/ms-auth', (req, res) => {
   res.json({
